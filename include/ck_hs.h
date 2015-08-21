@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2014 Samy Al Bahra.
+ * Copyright 2012-2015 Samy Al Bahra.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,8 +24,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _CK_HS_H
-#define _CK_HS_H
+#ifndef CK_HS_H
+#define CK_HS_H
 
 #include <ck_cc.h>
 #include <ck_malloc.h>
@@ -48,7 +48,7 @@
  */
 #define CK_HS_MODE_DIRECT	2
 
-/* 
+/*
  * Indicates that the values to be stored are pointers.
  * Allows for space optimizations in the presence of pointer
  * packing. Mutually exclusive with CK_HS_MODE_DIRECT.
@@ -108,6 +108,8 @@ typedef struct ck_hs_iterator ck_hs_iterator_t;
 /* Convenience wrapper to table hash function. */
 #define CK_HS_HASH(T, F, K) F((K), (T)->seed)
 
+typedef void *ck_hs_apply_fn_t(void *, void *);
+bool ck_hs_apply(ck_hs_t *, unsigned long, const void *, ck_hs_apply_fn_t *, void *);
 void ck_hs_iterator_init(ck_hs_iterator_t *);
 bool ck_hs_next(ck_hs_t *, ck_hs_iterator_t *, void **);
 bool ck_hs_move(ck_hs_t *, ck_hs_t *, ck_hs_hash_cb_t *,
@@ -129,5 +131,4 @@ bool ck_hs_reset(ck_hs_t *);
 bool ck_hs_reset_size(ck_hs_t *, unsigned long);
 void ck_hs_stat(ck_hs_t *, struct ck_hs_stat *);
 
-#endif /* _CK_HS_H */
-
+#endif /* CK_HS_H */

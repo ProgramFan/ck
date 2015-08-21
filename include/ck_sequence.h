@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2014 Samy Al Bahra.
+ * Copyright 2010-2015 Samy Al Bahra.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,8 +24,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _CK_SEQUENCE_H
-#define _CK_SEQUENCE_H
+#ifndef CK_SEQUENCE_H
+#define CK_SEQUENCE_H
 
 #include <ck_cc.h>
 #include <ck_pr.h>
@@ -47,7 +47,7 @@ ck_sequence_init(struct ck_sequence *sq)
 }
 
 CK_CC_INLINE static unsigned int
-ck_sequence_read_begin(struct ck_sequence *sq)
+ck_sequence_read_begin(const struct ck_sequence *sq)
 {
 	unsigned int version;
 
@@ -74,7 +74,7 @@ ck_sequence_read_begin(struct ck_sequence *sq)
 }
 
 CK_CC_INLINE static bool
-ck_sequence_read_retry(struct ck_sequence *sq, unsigned int version)
+ck_sequence_read_retry(const struct ck_sequence *sq, unsigned int version)
 {
 
 	/*
@@ -101,7 +101,7 @@ ck_sequence_write_begin(struct ck_sequence *sq)
 	 * Increment the sequence to an odd number to indicate
 	 * the beginning of a write update.
 	 */
-	ck_pr_inc_uint(&sq->sequence);
+	ck_pr_store_uint(&sq->sequence, sq->sequence + 1);
 	ck_pr_fence_store();
 	return;
 }
@@ -118,9 +118,8 @@ ck_sequence_write_end(struct ck_sequence *sq)
 	 * completion of a write update.
 	 */
 	ck_pr_fence_store();
-	ck_pr_inc_uint(&sq->sequence);
+	ck_pr_store_uint(&sq->sequence, sq->sequence + 1);
 	return;
 }
 
-#endif /* _CK_SEQUENCE_H */
-
+#endif /* CK_SEQUENCE_H */

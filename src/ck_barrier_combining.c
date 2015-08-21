@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2014 Samy Al Bahra.
+ * Copyright 2011-2015 Samy Al Bahra.
  * Copyright 2011 David Joseph.
  * All rights reserved.
  *
@@ -205,4 +205,3 @@ ck_barrier_combining(struct ck_barrier_combining *barrier,
 	state->sense = ~state->sense;
 	return;
 }
-

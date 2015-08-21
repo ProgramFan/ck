@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2014 Samy Al Bahra
+ * Copyright 2013-2015 Samy Al Bahra
  * Copyright 2013-2014 AppNexus, Inc.
  * All rights reserved.
  *
@@ -238,4 +238,3 @@ ck_array_deinit(struct ck_array *array, bool defer)
 	array->transaction = array->active = NULL;
 	return;
 }
-

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2014 Samy Al Bahra.
+ * Copyright 2012-2015 Samy Al Bahra.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +25,6 @@
  */
 
 #include <ck_ht.h>
-
-#ifdef CK_F_HT
 
 #include <assert.h>
 #include <ck_malloc.h>
@@ -387,12 +385,3 @@ main(int argc, char *argv[])
 
 	return 0;
 }
-#else
-int
-main(void)
-{
-
-	return 0;
-}
-#endif /* CK_F_HT */
-

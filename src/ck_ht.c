@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2014 Samy Al Bahra.
+ * Copyright 2012-2015 Samy Al Bahra.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,9 +24,9 @@
  * SUCH DAMAGE.
  */
 
+#define CK_HT_IM
 #include <ck_ht.h>
 
-#ifdef CK_F_HT
 /*
  * This implementation borrows several techniques from Josh Dybnis's
  * nbds library which can be found at http://code.google.com/p/nbds
@@ -81,15 +81,15 @@
 
 struct ck_ht_map {
 	unsigned int mode;
-	uint64_t deletions;
-	uint64_t probe_maximum;
-	uint64_t probe_length;
-	uint64_t probe_limit;
-	uint64_t size;
-	uint64_t n_entries;
-	uint64_t mask;
-	uint64_t capacity;
-	uint64_t step;
+	CK_HT_TYPE deletions;
+	CK_HT_TYPE probe_maximum;
+	CK_HT_TYPE probe_length;
+	CK_HT_TYPE probe_limit;
+	CK_HT_TYPE size;
+	CK_HT_TYPE n_entries;
+	CK_HT_TYPE mask;
+	CK_HT_TYPE capacity;
+	CK_HT_TYPE step;
 	CK_HT_WORD *probe_bound;
 	struct ck_ht_entry *entries;
 };
@@ -133,19 +133,21 @@ ck_ht_hash_wrapper(struct ck_ht_hash *h,
     uint64_t seed)
 {
 
-	h->value = MurmurHash64A(key, length, seed);
+	h->value = (unsigned long)MurmurHash64A(key, length, seed);
 	return;
 }
 
 static struct ck_ht_map *
-ck_ht_map_create(struct ck_ht *table, uint64_t entries)
+ck_ht_map_create(struct ck_ht *table, CK_HT_TYPE entries)
 {
 	struct ck_ht_map *map;
-	uint64_t size, n_entries, prefix;
+	CK_HT_TYPE size;
+	uintptr_t prefix;
+	uint32_t n_entries;
 
 	n_entries = ck_internal_power_2(entries);
 	if (n_entries < CK_HT_BUCKET_LENGTH)
-		return NULL;
+		n_entries = CK_HT_BUCKET_LENGTH;
 
 	size = sizeof(struct ck_ht_map) +
 		   (sizeof(struct ck_ht_entry) * n_entries + CK_MD_CACHELINE - 1);
@@ -190,12 +192,12 @@ ck_ht_map_create(struct ck_ht *table, uint64_t entries)
 static inline void
 ck_ht_map_bound_set(struct ck_ht_map *m,
     struct ck_ht_hash h,
-    uint64_t n_probes)
+    CK_HT_TYPE n_probes)
 {
-	uint64_t offset = h.value & m->mask;
+	CK_HT_TYPE offset = h.value & m->mask;
 
 	if (n_probes > m->probe_maximum)
-		ck_pr_store_64(&m->probe_maximum, n_probes);
+		CK_HT_TYPE_STORE(&m->probe_maximum, n_probes);
 
 	if (m->probe_bound != NULL && m->probe_bound[offset] < n_probes) {
 		if (n_probes >= CK_HT_WORD_MAX)
@@ -208,18 +210,18 @@ ck_ht_map_bound_set(struct ck_ht_map *m,
 	return;
 }
 
-static inline uint64_t
+static inline CK_HT_TYPE
 ck_ht_map_bound_get(struct ck_ht_map *m, struct ck_ht_hash h)
 {
-	uint64_t offset = h.value & m->mask;
-	uint64_t r = CK_HT_WORD_MAX;
+	CK_HT_TYPE offset = h.value & m->mask;
+	CK_HT_TYPE r = CK_HT_WORD_MAX;
 
 	if (m->probe_bound != NULL) {
 		r = CK_HT_LOAD(&m->probe_bound[offset]);
 		if (r == CK_HT_WORD_MAX)
-			r = ck_pr_load_64(&m->probe_maximum);
+			r = CK_HT_TYPE_LOAD(&m->probe_maximum);
 	} else {
-		r = ck_pr_load_64(&m->probe_maximum);
+		r = CK_HT_TYPE_LOAD(&m->probe_maximum);
 	}
 
 	return r;
@@ -253,7 +255,7 @@ ck_ht_init(struct ck_ht *table,
     unsigned int mode,
     ck_ht_hash_cb_t *h,
     struct ck_malloc *m,
-    uint64_t entries,
+    CK_HT_TYPE entries,
     uint64_t seed)
 {
 
@@ -281,19 +283,19 @@ ck_ht_map_probe_wr(struct ck_ht_map *map,
     ck_ht_entry_t **available,
     const void *key,
     uint16_t key_length,
-    uint64_t *probe_limit,
-    uint64_t *probe_wr)
+    CK_HT_TYPE *probe_limit,
+    CK_HT_TYPE *probe_wr)
 {
 	struct ck_ht_entry *bucket, *cursor;
 	struct ck_ht_entry *first = NULL;
 	size_t offset, i, j;
-	uint64_t probes = 0;
-	uint64_t limit;
+	CK_HT_TYPE probes = 0;
+	CK_HT_TYPE limit;
 
 	if (probe_limit == NULL) {
 		limit = ck_ht_map_bound_get(map, h);
 	} else {
-		limit = UINT64_MAX;
+		limit = CK_HT_TYPE_MAX;
 	}
 
 	offset = h.value & map->mask;
@@ -385,17 +387,17 @@ ck_ht_gc(struct ck_ht *ht, unsigned long cycles, unsigned long seed)
 {
 	CK_HT_WORD *bounds = NULL;
 	struct ck_ht_map *map = ht->map;
-	uint64_t maximum, i;
-	uint64_t size = 0;
+	CK_HT_TYPE maximum, i;
+	CK_HT_TYPE size = 0;
 
 	if (map->n_entries == 0) {
-		ck_pr_store_64(&map->probe_maximum, 0);
+		CK_HT_TYPE_STORE(&map->probe_maximum, 0);
 		if (map->probe_bound != NULL)
 			memset(map->probe_bound, 0, sizeof(CK_HT_WORD) * map->capacity);
 
 		return true;
 	}
-	
+
 	if (cycles == 0) {
 		maximum = 0;
 
@@ -414,8 +416,8 @@ ck_ht_gc(struct ck_ht *ht, unsigned long cycles, unsigned long seed)
 	for (i = 0; i < map->capacity; i++) {
 		struct ck_ht_entry *entry, *priority, snapshot;
 		struct ck_ht_hash h;
-		uint64_t probes_wr;
-		uint64_t offset;
+		CK_HT_TYPE probes_wr;
+		CK_HT_TYPE offset;
 
 		entry = &map->entries[(i + seed) & map->mask];
 		if (entry->key == CK_HT_KEY_EMPTY ||
@@ -449,17 +451,20 @@ ck_ht_gc(struct ck_ht *ht, unsigned long cycles, unsigned long seed)
 		offset = h.value & map->mask;
 
 		if (priority != NULL) {
+			CK_HT_TYPE_STORE(&map->deletions, map->deletions + 1);
+			ck_pr_fence_store();
 #ifndef CK_HT_PP
-			ck_pr_store_64(&priority->key_length, entry->key_length);
-			ck_pr_store_64(&priority->hash, entry->hash);
+			CK_HT_TYPE_STORE(&priority->key_length, entry->key_length);
+			CK_HT_TYPE_STORE(&priority->hash, entry->hash);
 #endif
-			ck_pr_store_ptr(&priority->value, (void *)entry->value);
+			ck_pr_store_ptr_unsafe(&priority->value, (void *)entry->value);
 			ck_pr_fence_store();
-			ck_pr_store_ptr(&priority->key, (void *)entry->key);
+			ck_pr_store_ptr_unsafe(&priority->key, (void *)entry->key);
 			ck_pr_fence_store();
-			ck_pr_store_64(&map->deletions, map->deletions + 1);
+			CK_HT_TYPE_STORE(&map->deletions, map->deletions + 1);
 			ck_pr_fence_store();
-			ck_pr_store_ptr(&entry->key, (void *)CK_HT_KEY_TOMBSTONE);
+			ck_pr_store_ptr_unsafe(&entry->key, (void *)CK_HT_KEY_TOMBSTONE);
+			ck_pr_fence_store();
 		}
 
 		if (cycles == 0) {
@@ -476,7 +481,7 @@ ck_ht_gc(struct ck_ht *ht, unsigned long cycles, unsigned long seed)
 	}
 
 	if (maximum != map->probe_maximum)
-		ck_pr_store_64(&map->probe_maximum, maximum);
+		CK_HT_TYPE_STORE(&map->probe_maximum, maximum);
 
 	if (bounds != NULL) {
 		for (i = 0; i < map->capacity; i++)
@@ -497,12 +502,12 @@ ck_ht_map_probe_rd(struct ck_ht_map *map,
 {
 	struct ck_ht_entry *bucket, *cursor;
 	size_t offset, i, j;
-	uint64_t probes = 0;
-	uint64_t probe_maximum;
+	CK_HT_TYPE probes = 0;
+	CK_HT_TYPE probe_maximum;
 
 #ifndef CK_HT_PP
-	uint64_t d = 0;
-	uint64_t d_prime = 0;
+	CK_HT_TYPE d = 0;
+	CK_HT_TYPE d_prime = 0;
 retry:
 #endif
 
@@ -531,11 +536,11 @@ retry:
 			ck_pr_fence_load();
 			snapshot->value = (uintptr_t)ck_pr_load_ptr(&cursor->value);
 #else
-			d = ck_pr_load_64(&map->deletions);
+			d = CK_HT_TYPE_LOAD(&map->deletions);
 			snapshot->key = (uintptr_t)ck_pr_load_ptr(&cursor->key);
 			ck_pr_fence_load();
-			snapshot->key_length = ck_pr_load_64(&cursor->key_length);
-			snapshot->hash = ck_pr_load_64(&cursor->hash);
+			snapshot->key_length = CK_HT_TYPE_LOAD(&cursor->key_length);
+			snapshot->hash = CK_HT_TYPE_LOAD(&cursor->hash);
 			snapshot->value = (uintptr_t)ck_pr_load_ptr(&cursor->value);
 #endif
 
@@ -570,7 +575,7 @@ retry:
 				if (snapshot->hash != h.value)
 					continue;
 
-				d_prime = ck_pr_load_64(&map->deletions);
+				d_prime = CK_HT_TYPE_LOAD(&map->deletions);
 
 				/*
 				 * It is possible that the slot was
@@ -595,12 +600,12 @@ leave:
 	return cursor;
 }
 
-uint64_t
+CK_HT_TYPE
 ck_ht_count(struct ck_ht *table)
 {
 	struct ck_ht_map *map = ck_pr_load_ptr(&table->map);
 
-	return ck_pr_load_64(&map->n_entries);
+	return CK_HT_TYPE_LOAD(&map->n_entries);
 }
 
 bool
@@ -628,7 +633,7 @@ ck_ht_next(struct ck_ht *table,
 }
 
 bool
-ck_ht_reset_size_spmc(struct ck_ht *table, uint64_t size)
+ck_ht_reset_size_spmc(struct ck_ht *table, CK_HT_TYPE size)
 {
 	struct ck_ht_map *map, *update;
 
@@ -637,7 +642,7 @@ ck_ht_reset_size_spmc(struct ck_ht *table, uint64_t size)
 	if (update == NULL)
 		return false;
 
-	ck_pr_store_ptr(&table->map, update);
+	ck_pr_store_ptr_unsafe(&table->map, update);
 	ck_ht_map_destroy(table->m, map, true);
 	return true;
 }
@@ -651,13 +656,13 @@ ck_ht_reset_spmc(struct ck_ht *table)
 }
 
 bool
-ck_ht_grow_spmc(struct ck_ht *table, uint64_t capacity)
+ck_ht_grow_spmc(struct ck_ht *table, CK_HT_TYPE capacity)
 {
 	struct ck_ht_map *map, *update;
 	struct ck_ht_entry *bucket, *previous;
 	struct ck_ht_hash h;
 	size_t k, i, j, offset;
-	uint64_t probes;
+	CK_HT_TYPE probes;
 
 restart:
 	map = table->map;
@@ -733,7 +738,7 @@ restart:
 	}
 
 	ck_pr_fence_store();
-	ck_pr_store_ptr(&table->map, update);
+	ck_pr_store_ptr_unsafe(&table->map, update);
 	ck_ht_map_destroy(table->m, map, true);
 	return true;
 }
@@ -763,30 +768,10 @@ ck_ht_remove_spmc(struct ck_ht *table,
 		return false;
 
 	*entry = snapshot;
-	ck_pr_store_ptr(&candidate->key, (void *)CK_HT_KEY_TOMBSTONE);
 
-	/*
-	 * It is possible that the key is read before transition into
-	 * the tombstone state. Assuming the keys do match, a reader
-	 * may have already acquired a snapshot of the value at the time.
-	 * However, assume the reader is preempted as a deletion occurs
-	 * followed by a replacement. In this case, it is possible that
-	 * the reader acquires some value V' instead of V. Let us assume
-	 * however that any transition from V into V' (essentially, update
-	 * of a value without the reader knowing of a K -> K' transition),
-	 * is preceded by an update to the deletions counter. This guarantees
-	 * any replacement of a T key also implies a D -> D' transition.
-	 * If D has not transitioned, the value has yet to be replaced so it
-	 * is a valid association with K and is safe to return. If D has
-	 * transitioned after a reader has acquired a snapshot then it is
-	 * possible that we are in the invalid state of (K, V'). The reader
-	 * is then able to attempt a reprobe at which point the only visible
-	 * states should be (T, V') or (K', V'). The latter is guaranteed
-	 * through memory fencing.
-	 */
-	ck_pr_store_64(&map->deletions, map->deletions + 1);
+	ck_pr_store_ptr_unsafe(&candidate->key, (void *)CK_HT_KEY_TOMBSTONE);
 	ck_pr_fence_store();
-	ck_pr_store_64(&map->n_entries, map->n_entries - 1);
+	CK_HT_TYPE_STORE(&map->n_entries, map->n_entries - 1);
 	return true;
 }
 
@@ -797,7 +782,7 @@ ck_ht_get_spmc(struct ck_ht *table,
 {
 	struct ck_ht_entry *candidate, snapshot;
 	struct ck_ht_map *map;
-	uint64_t d, d_prime;
+	CK_HT_TYPE d, d_prime;
 
 restart:
 	map = ck_pr_load_ptr(&table->map);
@@ -806,7 +791,7 @@ restart:
 	 * Platforms that cannot read key and key_length atomically must reprobe
 	 * on the scan of any single entry.
 	 */
-	d = ck_pr_load_64(&map->deletions);
+	d = CK_HT_TYPE_LOAD(&map->deletions);
 
 	if (table->mode & CK_HT_MODE_BYTESTRING) {
 		candidate = ck_ht_map_probe_rd(map, h, &snapshot,
@@ -816,7 +801,7 @@ restart:
 		    (void *)entry->key, sizeof(entry->key));
 	}
 
-	d_prime = ck_pr_load_64(&map->deletions);
+	d_prime = CK_HT_TYPE_LOAD(&map->deletions);
 	if (d != d_prime) {
 		/*
 		 * It is possible we have read (K, V'). Only valid states are
@@ -840,7 +825,7 @@ ck_ht_set_spmc(struct ck_ht *table,
 {
 	struct ck_ht_entry snapshot, *candidate, *priority;
 	struct ck_ht_map *map;
-	uint64_t probes, probes_wr;
+	CK_HT_TYPE probes, probes_wr;
 	bool empty = false;
 
 	for (;;) {
@@ -878,53 +863,73 @@ ck_ht_set_spmc(struct ck_ht *table,
 	if (candidate->key != CK_HT_KEY_EMPTY &&
 	    priority != NULL && candidate != priority) {
 		/*
-		 * If we are replacing an existing entry and an earlier
-		 * tombstone was found in the probe sequence then replace
-		 * the existing entry in a manner that doesn't affect linearizability
-		 * of concurrent get operations. We avoid a state of (K, B)
-		 * (where [K, B] -> [K', B]) by guaranteeing a forced reprobe
-		 * before transitioning from K to T. (K, B) implies (K, B, D')
-		 * so we will reprobe successfully from this transient state.
+		 * Entry is moved into another position in probe sequence.
+		 * We avoid a state of (K, B) (where [K, B] -> [K', B]) by
+		 * guaranteeing a forced reprobe before transitioning from K to
+		 * T. (K, B) implies (K, B, D') so we will reprobe successfully
+		 * from this transient state.
 		 */
 		probes = probes_wr;
 
 #ifndef CK_HT_PP
-		ck_pr_store_64(&priority->key_length, entry->key_length);
-		ck_pr_store_64(&priority->hash, entry->hash);
+		CK_HT_TYPE_STORE(&priority->key_length, entry->key_length);
+		CK_HT_TYPE_STORE(&priority->hash, entry->hash);
 #endif
-		ck_pr_store_ptr(&priority->value, (void *)entry->value);
+
+		/*
+		 * Readers must observe version counter change before they
+		 * observe re-use. If they observe re-use, it is at most
+		 * a tombstone.
+		 */
+		if (priority->value == CK_HT_KEY_TOMBSTONE) {
+			CK_HT_TYPE_STORE(&map->deletions, map->deletions + 1);
+			ck_pr_fence_store();
+		}
+
+		ck_pr_store_ptr_unsafe(&priority->value, (void *)entry->value);
 		ck_pr_fence_store();
-		ck_pr_store_ptr(&priority->key, (void *)entry->key);
+		ck_pr_store_ptr_unsafe(&priority->key, (void *)entry->key);
 		ck_pr_fence_store();
-		ck_pr_store_64(&map->deletions, map->deletions + 1);
+
+		/*
+		 * Make sure that readers who observe the tombstone would
+		 * also observe counter change.
+		 */
+		CK_HT_TYPE_STORE(&map->deletions, map->deletions + 1);
 		ck_pr_fence_store();
-		ck_pr_store_ptr(&candidate->key, (void *)CK_HT_KEY_TOMBSTONE);
+
+		ck_pr_store_ptr_unsafe(&candidate->key, (void *)CK_HT_KEY_TOMBSTONE);
+		ck_pr_fence_store();
 	} else {
 		/*
 		 * In this case we are inserting a new entry or replacing
-		 * an existing entry. There is no need to force a re-probe
-		 * on tombstone replacement due to the fact that previous
-		 * deletion counter update would have been published with
-		 * respect to any concurrent probes.
+		 * an existing entry. Yes, this can be combined into above branch,
+		 * but isn't because you are actually looking at dying code
+		 * (ck_ht is effectively deprecated and is being replaced soon).
 		 */
 		bool replace = candidate->key != CK_HT_KEY_EMPTY &&
 		    candidate->key != CK_HT_KEY_TOMBSTONE;
 
 		if (priority != NULL) {
+			if (priority->key == CK_HT_KEY_TOMBSTONE) {
+				CK_HT_TYPE_STORE(&map->deletions, map->deletions + 1);
+				ck_pr_fence_store();
+			}
+
 			candidate = priority;
 			probes = probes_wr;
 		}
 
 #ifdef CK_HT_PP
-		ck_pr_store_ptr(&candidate->value, (void *)entry->value);
+		ck_pr_store_ptr_unsafe(&candidate->value, (void *)entry->value);
 		ck_pr_fence_store();
-		ck_pr_store_ptr(&candidate->key, (void *)entry->key);
+		ck_pr_store_ptr_unsafe(&candidate->key, (void *)entry->key);
 #else
-		ck_pr_store_64(&candidate->key_length, entry->key_length);
-		ck_pr_store_64(&candidate->hash, entry->hash);
-		ck_pr_store_ptr(&candidate->value, (void *)entry->value);
+		CK_HT_TYPE_STORE(&candidate->key_length, entry->key_length);
+		CK_HT_TYPE_STORE(&candidate->hash, entry->hash);
+		ck_pr_store_ptr_unsafe(&candidate->value, (void *)entry->value);
 		ck_pr_fence_store();
-		ck_pr_store_ptr(&candidate->key, (void *)entry->key);
+		ck_pr_store_ptr_unsafe(&candidate->key, (void *)entry->key);
 #endif
 
 		/*
@@ -932,7 +937,7 @@ ck_ht_set_spmc(struct ck_ht *table,
 		 * of entries associated with map.
 		 */
 		if (replace == false)
-			ck_pr_store_64(&map->n_entries, map->n_entries + 1);
+			CK_HT_TYPE_STORE(&map->n_entries, map->n_entries + 1);
 	}
 
 	ck_ht_map_bound_set(map, h, probes);
@@ -957,7 +962,7 @@ ck_ht_put_spmc(struct ck_ht *table,
 {
 	struct ck_ht_entry snapshot, *candidate, *priority;
 	struct ck_ht_map *map;
-	uint64_t probes, probes_wr;
+	CK_HT_TYPE probes, probes_wr;
 
 	for (;;) {
 		map = table->map;
@@ -982,6 +987,10 @@ ck_ht_put_spmc(struct ck_ht *table,
 	}
 
 	if (priority != NULL) {
+		/* Version counter is updated before re-use. */
+		CK_HT_TYPE_STORE(&map->deletions, map->deletions + 1);
+		ck_pr_fence_store();
+
 		/* Re-use tombstone if one was found. */
 		candidate = priority;
 		probes = probes_wr;
@@ -998,18 +1007,18 @@ ck_ht_put_spmc(struct ck_ht *table,
 	ck_ht_map_bound_set(map, h, probes);
 
 #ifdef CK_HT_PP
-	ck_pr_store_ptr(&candidate->value, (void *)entry->value);
+	ck_pr_store_ptr_unsafe(&candidate->value, (void *)entry->value);
 	ck_pr_fence_store();
-	ck_pr_store_ptr(&candidate->key, (void *)entry->key);
+	ck_pr_store_ptr_unsafe(&candidate->key, (void *)entry->key);
 #else
-	ck_pr_store_64(&candidate->key_length, entry->key_length);
-	ck_pr_store_64(&candidate->hash, entry->hash);
-	ck_pr_store_ptr(&candidate->value, (void *)entry->value);
+	CK_HT_TYPE_STORE(&candidate->key_length, entry->key_length);
+	CK_HT_TYPE_STORE(&candidate->hash, entry->hash);
+	ck_pr_store_ptr_unsafe(&candidate->value, (void *)entry->value);
 	ck_pr_fence_store();
-	ck_pr_store_ptr(&candidate->key, (void *)entry->key);
+	ck_pr_store_ptr_unsafe(&candidate->key, (void *)entry->key);
 #endif
 
-	ck_pr_store_64(&map->n_entries, map->n_entries + 1);
+	CK_HT_TYPE_STORE(&map->n_entries, map->n_entries + 1);
 
 	/* Enforce a load factor of 0.5. */
 	if (map->n_entries * 2 > map->capacity)
@@ -1025,6 +1034,3 @@ ck_ht_destroy(struct ck_ht *table)
 	ck_ht_map_destroy(table->m, table->map, false);
 	return;
 }
-
-#endif /* CK_F_HT */
-

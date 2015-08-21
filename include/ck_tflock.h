@@ -24,15 +24,15 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _CK_TFLOCK_TICKET_H
-#define _CK_TFLOCK_TICKET_H
+#ifndef CK_TFLOCK_TICKET_H
+#define CK_TFLOCK_TICKET_H
 
 /*
  * This is an implementation of task-fair locks derived from the work
  * described in:
  *	John M. Mellor-Crummey and Michael L. Scott. 1991.
  *	Scalable reader-writer synchronization for shared-memory
- *	multiprocessors. SIGPLAN Not. 26, 7 (April 1991), 106-113. 
+ *	multiprocessors. SIGPLAN Not. 26, 7 (April 1991), 106-113.
  */
 
 #include <ck_cc.h>
@@ -65,7 +65,7 @@ ck_tflock_ticket_fca_32(uint32_t *target, uint32_t mask, uint32_t delta)
 
 		ck_pr_stall();
 	}
-	
+
 	return snapshot;
 }
 
@@ -89,7 +89,7 @@ ck_tflock_ticket_write_lock(struct ck_tflock_ticket *lock)
 	while (ck_pr_load_32(&lock->completion) != previous)
 		ck_pr_stall();
 
-	ck_pr_fence_acquire();
+	ck_pr_fence_lock();
 	return;
 }
 
@@ -97,7 +97,7 @@ CK_CC_INLINE static void
 ck_tflock_ticket_write_unlock(struct ck_tflock_ticket *lock)
 {
 
-	ck_pr_fence_release();
+	ck_pr_fence_unlock();
 	ck_tflock_ticket_fca_32(&lock->completion, CK_TFLOCK_TICKET_WC_TOPMSK,
 	    CK_TFLOCK_TICKET_WC_INCR);
 	return;
@@ -108,15 +108,18 @@ ck_tflock_ticket_read_lock(struct ck_tflock_ticket *lock)
 {
 	uint32_t previous;
 
-	previous = ck_tflock_ticket_fca_32(&lock->request, CK_TFLOCK_TICKET_RC_TOPMSK,
-	    CK_TFLOCK_TICKET_RC_INCR) & CK_TFLOCK_TICKET_W_MASK;
+	previous = ck_tflock_ticket_fca_32(&lock->request,
+	    CK_TFLOCK_TICKET_RC_TOPMSK, CK_TFLOCK_TICKET_RC_INCR) &
+	    CK_TFLOCK_TICKET_W_MASK;
 
 	ck_pr_fence_atomic_load();
 
-	while ((ck_pr_load_uint(&lock->completion) & CK_TFLOCK_TICKET_W_MASK) != previous)
+	while ((ck_pr_load_32(&lock->completion) &
+	    CK_TFLOCK_TICKET_W_MASK) != previous) {
 		ck_pr_stall();
+	}
 
-	ck_pr_fence_acquire();
+	ck_pr_fence_lock();
 	return;
 }
 
@@ -124,10 +127,10 @@ CK_CC_INLINE static void
 ck_tflock_ticket_read_unlock(struct ck_tflock_ticket *lock)
 {
 
-	ck_pr_fence_release();
+	ck_pr_fence_unlock();
 	ck_tflock_ticket_fca_32(&lock->completion, CK_TFLOCK_TICKET_RC_TOPMSK,
 	    CK_TFLOCK_TICKET_RC_INCR);
 	return;
 }
 
-#endif /* _CK_TFLOCK_TICKET_H */
+#endif /* CK_TFLOCK_TICKET_H */

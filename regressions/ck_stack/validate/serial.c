@@ -1,5 +1,5 @@
 /*
- * Copyright 2009-2014 Samy Al Bahra.
+ * Copyright 2009-2015 Samy Al Bahra.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -77,7 +77,7 @@ serial(ck_stack_t *stack)
 int
 main(void)
 {
-	ck_stack_t stack;
+	ck_stack_t stack CK_CC_CACHELINE;
 
 	serial(&stack);
 	return (0);
